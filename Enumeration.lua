@@ -65,10 +65,10 @@ local function MakeEnumeration(_, EnumType, EnumTypes)
 
 	local Enumerator = newproxy(true)
 	local EnumeratorMetatable = getmetatable(Enumerator)
-	EnumeratorMetatable.__index = ReadOnlyIndex(EnumTypes);
-	EnumeratorMetatable.__newindex = ReadOnlyNewIndex;
-	EnumeratorMetatable.__metatable = ReadOnlyMetatable;
-	EnumeratorMetatable.__tostring = function() return EnumType end;
+	EnumeratorMetatable.__index = ReadOnlyIndex(EnumTypes)
+	EnumeratorMetatable.__newindex = ReadOnlyNewIndex
+	EnumeratorMetatable.__metatable = ReadOnlyMetatable
+	EnumeratorMetatable.__tostring = function() return EnumType end
 
 	Enumerations[EnumType] = Enumerator
 end
