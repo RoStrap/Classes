@@ -84,6 +84,8 @@ local function MakeEnumeration(_, EnumType, EnumTypes)
 		ItemMetatable.__newindex = ReadOnlyNewIndex
 		ItemMetatable.__metatable = ReadOnlyMetatable
 		ItemMetatable.__tostring = function() return "Enumeration." .. EnumType .. "." .. Name end
+
+		EnumTypes[i] = Item
 		EnumContainer[Name] = Item
 	end
 
