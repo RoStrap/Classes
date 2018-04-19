@@ -54,10 +54,15 @@ Class.__index = {
   -- Property defaults
   Property1 = true;
 }
+Class.__index.Property2 = false; -- This is fine too
 
--- Constructor function
+-- Constructor functions
 function Class.new()
   return setmetatable({}, Class)
+end
+
+function Class.FromOther(Other)
+  return setmetatable({Other = Other}, Class)	
 end
 
 function Class.__index:Method()
@@ -67,6 +72,10 @@ end
 function Class.__index:Method2()
   -- This method does awesome things!
 end
+
+return Class
 ```
 
-Wrapper classes do not need to follow this syntax.
+This syntax most clearly shows which functions and properties are inherited by Objects of type `Class` versus which functions are the constructors. Method functions are declared with a `:`, while constructors are declared with a `.` before the function name. Never use strings instead of Enumerators.
+
+Wrapper classes are not held to this standard.
