@@ -1,16 +1,17 @@
 -- Pure-lua implementation of Enums
+-- @author Validark
 
 local Enumerations = {}
 
-local function ReadOnlyNewIndex(_, index, _)
-	error("[Enumeration] Cannot write to index \"" .. tostring(index) .. "\"", 2)
+local function ReadOnlyNewIndex(_, Index, _)
+	error("[Enumeration] Cannot write to index \"" .. tostring(Index) .. "\"", 2)
 end
 
 local ReadOnlyMetatable = "[Enumeration] Requested metatable is locked"
 
-local function ReadOnlyIndex(t)
-	return function(_, index)
-		return t[index] or error("[Enumeration] \"" .. tostring(index) .. "\" is not a valid EnumerationItem", 2)
+local function ReadOnlyIndex(Table)
+	return function(_, Index)
+		return Table[Index] or error("[Enumeration] \"" .. tostring(Index) .. "\" is not a valid EnumerationItem", 2)
 	end
 end
 
@@ -40,10 +41,10 @@ local function IsValidArray(Table)
 end
 
 local function MakeEnumeration(_, EnumType, EnumTypes)
-	if type(EnumType) ~= "string" then error("[Enumeration] Expected string to instantiate Enumeration, got " .. typeof(EnumType) .. " " .. tostring(EnumType)) end
-	if type(EnumTypes) ~= "table" then error("[Enumeration] Expected array of EnumerationItem Names, got " .. typeof(EnumType) .. " " .. tostring(EnumType)) end
-	if not IsValidArray(EnumTypes) then error("[Enumeration] Expected table to be an array of the form {\"Type1\", \"Type2\", \"Type3\"}") end
-	if Enumerations[EnumType] then error("[Enumeration] Enumeration of EnumType " .. tostring(EnumType) .. " already exists") end
+	if type(EnumType) ~= "string" then error("[Enumeration] Expected string to instantiate Enumeration, got " .. typeof(EnumType) .. " " .. tostring(EnumType), 2) end
+	if type(EnumTypes) ~= "table" then error("[Enumeration] Expected array of EnumerationItem Names, got " .. typeof(EnumType) .. " " .. tostring(EnumType), 2) end
+	if not IsValidArray(EnumTypes) then error("[Enumeration] Expected table to be an array of the form {\"Type1\", \"Type2\", \"Type3\"}", 2) end
+	if Enumerations[EnumType] then error("[Enumeration] Enumeration of EnumType " .. tostring(EnumType) .. " already exists", 2) end
 
 	for i = 1, #EnumTypes do
 		local Name = EnumTypes[i]
