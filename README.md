@@ -28,7 +28,7 @@ Enumerations have a `Value` equal to their index in the declarative array minus 
 |:-:|:----:|:--:|:----:|:--:|
 ||0|1|2||
 
-In this implementation, we use `Enumeration` in the places where Roblox uses `Enum`. [Further documentation on Enumerations here](http://wiki.roblox.com/index.php?title=Enumeration).
+In this implementation, we use `Enumeration` in the places where Roblox uses `Enum`.
 
 ```lua
 local Enumerations = Enumeration:GetEnumerations()
@@ -42,6 +42,8 @@ print("   ", Enumeration.ButtonType.Custom.Name)
 print("   ", Enumeration.ButtonType.Custom.Value)
 print("   ", Enumeration.ButtonType.Custom.EnumType)
 ```
+
+[Further documentation on Enumerations here.](http://wiki.roblox.com/index.php?title=Enumeration)
 
 # Classes
 Custom classes contributed to RoStrap should follow the following syntax:
