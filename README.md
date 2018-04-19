@@ -76,6 +76,6 @@ end
 return Class
 ```
 
-This syntax most clearly shows which functions and properties are inherited by Objects of type `Class` versus which functions are the constructors. Method functions are declared with a `:`, while constructors are declared with a `.` before the function name. Never use strings instead of Enumerators.
+This syntax most clearly shows which functions and properties are inherited by Objects of type `Class` versus which functions are the constructors. Method functions are declared with a `:`, while constructors are declared with a `.` preceding the function name. Never use strings instead of Enumerators.
 
-Wrapper classes are not held to this standard.
+Wrapper classes are not bound to the same syntactic guidelines.
