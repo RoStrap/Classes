@@ -28,19 +28,24 @@ Enumerations have a `Value` equal to their index in the declarative array minus 
 |:-:|:----:|:--:|:----:|:--:|
 ||0|1|2||
 
-In this implementation, we use `Enumeration` in the places where Roblox uses `Enum`.
+In this implementation, we use `Enumeration` in the places where Roblox uses `Enum`:
 
 ```lua
-local Enumerations = Enumeration:GetEnumerations()
-print("Enumerations:")
-for i = 1, #Enumerations do
-	print("   ", i, Enumerations[i])
+-- Print all Roblox enums
+for i, EnumType in next, Enum:GetEnums() do
+	print(i, EnumType)
+	for j, EnumName in next, EnumType:GetEnumItems() do
+		print("   ", j, EnumName)
+	end
 end
 
-print(Enumeration.ButtonType.Custom)
-print("   ", Enumeration.ButtonType.Custom.Name)
-print("   ", Enumeration.ButtonType.Custom.Value)
-print("   ", Enumeration.ButtonType.Custom.EnumType)
+-- Print all RoStrap Enumerations
+for i, EnumType in next, Enumeration:GetEnumerations() do
+	print(i, EnumType)
+	for j, EnumName in next, EnumType:GetEnumerationItems() do
+		print("   ", j, EnumName)
+	end
+end
 ```
 
 [Further documentation on Enumerations here.](http://wiki.roblox.com/index.php?title=Enumeration)
