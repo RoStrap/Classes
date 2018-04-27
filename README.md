@@ -50,15 +50,10 @@ end
 
 [Further documentation on Enumerations here.](http://wiki.roblox.com/index.php?title=Enumeration)
 
-# setreadonly
-This function is `lowercase` because it attempts to mimic `setmetatable`. Called via `setreadonly(Class, ReadOnlyProperties)`, it will copy `ReadOnlyProperties` into `__index` (it must exist) and use the `ReadOnlyProperties` table within a `Class:__newindex` function to determine whether a property of your `Class` is writable. Keep in mind, that `__newindex` only fires the first time an index previously unwritten to is written to. So this has basically no performance impact whatsoever.
-
 # Classes
 Custom classes contributed to RoStrap should follow the following syntax:
 
 ```lua
-local setreadonly = Resources:LoadLibrary("setreadonly")
-
 local Class = {}
 Class.__index = {
   -- Property defaults
@@ -66,10 +61,6 @@ Class.__index = {
 }
 
 Class.__index.Property2 = false; -- This is fine too
-
-setreadonly(Class, {
-  ClassName = "Class";
-})
 
 -- Constructor functions
 function Class.new()
