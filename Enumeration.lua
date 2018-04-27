@@ -1,18 +1,20 @@
 -- Pure-lua implementation of Enums
--- @author Validark
+
+local Resources = require(game:GetService("ReplicatedStorage"):WaitForChild("Resources"))
+local Debug = Resources:LoadLibrary("Debug")
 
 local Enumerations = {}
 local EnumerationsArray = {}
 
 local function ReadOnlyNewIndex(_, Index, _)
-	error("[Enumeration] Cannot write to index \"" .. tostring(Index) .. "\"", 2)
+	Debug.Error("Cannot write to index [%q]", Index)
 end
 
 local ReadOnlyMetatable = "[Enumeration] Requested metatable is locked"
 
 local function ReadOnlyIndex(Table)
 	return function(_, Index)
-		return Table[Index] or error("[Enumeration] \"" .. tostring(Index) .. "\" is not a valid EnumerationItem", 2)
+		return Table[Index] or Debug.Error("[%q] is not a valid EnumerationItem", Index)
 	end
 end
 
@@ -29,7 +31,7 @@ local function GetEnumerationsNameCall(Table, MethodName)
 
 			return Copy
 		else
-			error("[Enumeration] The only valid method of this object is \"" .. MethodName .. "\"", 2)
+			Debug.Error("The only valid method of this object is \"" .. MethodName .. "\"")
 		end
 	end
 end
@@ -65,10 +67,10 @@ local function IsValidArray(Table)
 end
 
 local function MakeEnumeration(_, EnumType, EnumTypes)
-	if type(EnumType) ~= "string" then error("[Enumeration] Expected string to instantiate Enumeration, got " .. typeof(EnumType) .. " " .. tostring(EnumType), 2) end
-	if type(EnumTypes) ~= "table" then error("[Enumeration] Expected array of EnumerationItem Names, got " .. typeof(EnumType) .. " " .. tostring(EnumType), 2) end
-	if not IsValidArray(EnumTypes) then error("[Enumeration] Expected table to be an array of the form {\"Type1\", \"Type2\", \"Type3\"}", 2) end
-	if Enumerations[EnumType] then error("[Enumeration] Enumeration of EnumType " .. tostring(EnumType) .. " already exists", 2) end
+	if type(EnumType) ~= "string" then Debug.Error("Expected string to instantiate Enumeration, got %s", EnumType) end
+	if type(EnumTypes) ~= "table" then Debug.Error("Expected array of EnumerationItem Names, got %s", EnumType) end
+	if not IsValidArray(EnumTypes) then Debug.Error("Expected table to be an array of the form {\"Type1\", \"Type2\", \"Type3\"}") end
+	if Enumerations[EnumType] then Debug.Error("Enumeration of EnumType " .. tostring(EnumType) .. " already exists") end
 
 	local EnumContainer = {}
 
