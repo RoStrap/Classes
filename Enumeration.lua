@@ -43,7 +43,7 @@ local function IsValidArray(Table)
 	local Unwarned = true
 	local HighestIndex = next(Table)
 
-	if HighestIndex then
+	if type(HighestIndex) == "number" then
 		for i, v in next, Table, HighestIndex do
 			if type(i) == "number" and HighestIndex < i then
 				HighestIndex = i
@@ -58,7 +58,7 @@ local function IsValidArray(Table)
 			end
 		end
 	else
-		Debug.Warn("Table of EnumTypes is empty")
+		Debug.Warn("Table of EnumTypes is either empty or has a non-integer key")
 		Unwarned = false
 	end
 
