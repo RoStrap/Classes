@@ -39,38 +39,37 @@ end
 local function IsValidArray(Table)
 	-- @returns bool Whether table Table it is a valid array of type {"Type1", "Type2", "Type3"}
 
-	local Count = 0
-	local HighestIndex = 0
+	local Count = 1
 	local Unwarned = true
+	local HighestIndex = next(Table)
 
-	if not next(Table) then
-		warn("[Enumeration] Table EnumTypes is empty")
+	if HighestIndex then
+		for i, v in next, Table, HighestIndex do
+			if type(i) == "number" and HighestIndex < i then
+				HighestIndex = i
+			end
+			Count = Count + 1
+		end
+
+		for i = 1, Count do
+			if type(Table[i]) ~= "string" then
+				Debug.Warn("Table of EnumTypes is not a valid array, got %s at index %s", Table[i], i)
+				Unwarned = false
+			end
+		end
+	else
+		Debug.Warn("Table of EnumTypes is empty")
 		Unwarned = false
-	end
-
-	for i, v in next, Table do
-		if type(i) ~= "number" or 0 >= i then
-			warn("[Enumeration] Table EnumTypes is not a valid array, got key", typeof(i), tostring(i))
-			Unwarned = false
-		end
-
-		if type(v) ~= "string" then
-			warn("[Enumeration] Table EnumTypes is not a valid array, got value", typeof(v), tostring(v))
-			Unwarned = false
-		end
-
-		if HighestIndex < i then HighestIndex = i end
-		Count = Count + 1
 	end
 
 	return Unwarned and Count == HighestIndex
 end
 
 local function MakeEnumeration(_, EnumType, EnumTypes)
-	if type(EnumType) ~= "string" then Debug.Error("Expected string to instantiate Enumeration, got %s", EnumType) end
-	if type(EnumTypes) ~= "table" then Debug.Error("Expected array of EnumerationItem Names, got %s", EnumType) end
-	if not IsValidArray(EnumTypes) then Debug.Error("Expected table to be an array of the form {\"Type1\", \"Type2\", \"Type3\"}") end
-	if Enumerations[EnumType] then Debug.Error("Enumeration of EnumType " .. tostring(EnumType) .. " already exists") end
+	if type(EnumType) ~= "string" then Debug.Error("Cannot write to non-string key of Enumeration: %s", EnumType) end
+	if type(EnumTypes) ~= "table" then Debug.Error("Expected array of string EnumerationItem Names, got %s", EnumType) end
+	if not IsValidArray(EnumTypes) then Debug.Error("Expected table " .. EnumType .. " to be an array of strings of the form {\"Type1\", \"Type2\", \"Type3\"}") end
+	if Enumerations[EnumType] then Debug.Error("Enumeration of EnumType " .. EnumType .. " already exists") end
 
 	local EnumContainer = {}
 
