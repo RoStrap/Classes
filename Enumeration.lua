@@ -2,7 +2,39 @@
 
 local Resources = require(game:GetService("ReplicatedStorage"):WaitForChild("Resources"))
 local Debug = Resources:LoadLibrary("Debug")
-local SortedArray = Resources:LoadLibrary("SortedArray")
+
+local Enumerations = {}
+local EnumerationsArray = {}
+
+local function ReadOnlyNewIndex(_, Index, _)
+	Debug.Error("Cannot write to index [%q]", Index)
+end
+
+local ReadOnlyMetatable = "[Enumeration] Requested metatable is locked"
+
+local function ReadOnlyIndex(Table)
+	return function(_, Index)
+		return Table[Index] or Debug.Error("[%q] is not a valid EnumerationItem", Index)
+	end
+end
+
+local function GetEnumerationsNameCall(Table, MethodName)
+	return function(_, ...)
+		if select(select("#", ...), ...) == MethodName then
+			-- Returns a copy of array Table
+
+			local Copy = {}
+
+			for i = 1, #Table do
+				Copy[i] = Table[i]
+			end
+
+			return Copy
+		else
+			Debug.Error("The only valid method of this object is \"" .. MethodName .. "\"")
+		end
+	end
+end
 
 local function IsValidArray(Table)
 	-- @returns bool Whether table Table it is a valid array of type {"Type1", "Type2", "Type3"}
@@ -12,7 +44,7 @@ local function IsValidArray(Table)
 	local HighestIndex = next(Table)
 
 	if type(HighestIndex) == "number" then
-		for i, _ in next, Table, HighestIndex do
+		for i, v in next, Table, HighestIndex do
 			if type(i) == "number" and HighestIndex < i then
 				HighestIndex = i
 			end
@@ -33,42 +65,6 @@ local function IsValidArray(Table)
 	return Unwarned and Count == HighestIndex
 end
 
-local Enumerations = {}
-local EnumerationsArray = SortedArray.new()
-
-local function ReadOnlyNewIndex(_, Index, _)
-	Debug.Error("Cannot write to index [%q]", Index)
-end
-
-local function GetEnumerationsNameCall(Table, MethodName)
-	return function(_, ...)
-		if select(select("#", ...), ...) == MethodName then
-			local Copy = {}
-
-			for i = 1, #Table do
-				Copy[i] = Table[i]
-			end
-
-			return Copy
-		else
-			Debug.Error("The only valid method of this object is \"" .. MethodName .. "\"")
-		end
-	end
-end
-
-local function ConstructUserdata(__index, __newindex, String, __namecall)
-	local Enumeration = newproxy(true)
-
-	local EnumerationMetatable = getmetatable(Enumeration)
-	EnumerationMetatable.__index = function(_, Index) return __index[Index] or Debug.Error("[%q] is not a valid EnumerationItem", Index) end
-	EnumerationMetatable.__newindex = __newindex
-	EnumerationMetatable.__namecall = __namecall
-	EnumerationMetatable.__tostring = function() return String end
-	EnumerationMetatable.__metatable = "[Enumeration] Requested metatable is locked"
-
-	return Enumeration
-end
-
 local function MakeEnumeration(_, EnumType, EnumTypes)
 	if type(EnumType) ~= "string" then Debug.Error("Cannot write to non-string key of Enumeration: %s", EnumType) end
 	if type(EnumTypes) ~= "table" then Debug.Error("Expected array of string EnumerationItem Names, got %s", EnumType) end
@@ -79,19 +75,52 @@ local function MakeEnumeration(_, EnumType, EnumTypes)
 
 	for i = 1, #EnumTypes do
 		local Name = EnumTypes[i]
-		local Item = ConstructUserdata({
+		local Item = newproxy(true)
+		local ItemMetatable = getmetatable(Item)
+		ItemMetatable.__index = ReadOnlyIndex{
 			EnumType = EnumType;
 			Name = Name;
 			Value = i - 1;
-		}, ReadOnlyNewIndex, "Enumeration." .. EnumType .. "." .. Name)
+		}
+		ItemMetatable.__newindex = ReadOnlyNewIndex
+		ItemMetatable.__metatable = ReadOnlyMetatable
+		ItemMetatable.__tostring = function() return "Enumeration." .. EnumType .. "." .. Name end
 
 		EnumTypes[i] = Item
 		EnumContainer[Name] = Item
 	end
 
-	local Enumerator = ConstructUserdata(EnumContainer, ReadOnlyNewIndex, EnumType, GetEnumerationsNameCall(EnumTypes, "GetEnumerationItems"))
-	EnumerationsArray:Insert(Enumerator)
+	local Enumerator = newproxy(true)
+	local EnumeratorMetatable = getmetatable(Enumerator)
+	EnumeratorMetatable.__index = ReadOnlyIndex(EnumContainer)
+	EnumeratorMetatable.__newindex = ReadOnlyNewIndex
+	EnumeratorMetatable.__metatable = ReadOnlyMetatable
+	EnumeratorMetatable.__tostring = function() return EnumType end
+	EnumeratorMetatable.__namecall = GetEnumerationsNameCall(EnumTypes, "GetEnumerationItems")
+
+	local InsertedIntoEnumerationsArray -- Place into ordered EnumerationsArray so we don't have to do table.sort upon every GetEnumerations()
+
+	for i = 1, #EnumerationsArray do
+		if EnumType < tostring(EnumerationsArray[i]) then -- Determine whether `key` precedes `EnumerationsArray[i]` alphabetically
+			InsertedIntoEnumerationsArray = true
+			table.insert(EnumerationsArray, i, Enumerator)
+			break
+		end
+	end
+
+	if not InsertedIntoEnumerationsArray then
+		table.insert(EnumerationsArray, Enumerator)
+	end
+
 	Enumerations[EnumType] = Enumerator
 end
 
-return ConstructUserdata(Enumerations, MakeEnumeration, "Enumerations", GetEnumerationsNameCall(EnumerationsArray, "GetEnumerations"))
+local Enumeration = newproxy(true)
+local EnumerationMetatable = getmetatable(Enumeration)
+EnumerationMetatable.__index = ReadOnlyIndex(Enumerations)
+EnumerationMetatable.__newindex = MakeEnumeration
+EnumerationMetatable.__metatable = ReadOnlyMetatable
+EnumerationMetatable.__tostring = function() return "Enumerations" end
+EnumerationMetatable.__namecall = GetEnumerationsNameCall(EnumerationsArray, "GetEnumerations")
+
+return Enumeration
