@@ -45,6 +45,10 @@ local function ReadOnlyNewIndex(_, Index, _)
 	Debug.Error("Cannot write to index [%q]", Index)
 end
 
+local function Comparison(Left, Right)
+	return tostring(Left) < tostring(Right)
+end
+
 local function ConstructUserdata(__index, __newindex, String)
 	local Enumeration = newproxy(true)
 
@@ -53,6 +57,7 @@ local function ConstructUserdata(__index, __newindex, String)
 	EnumerationMetatable.__newindex = __newindex
 	EnumerationMetatable.__tostring = function() return String end
 	EnumerationMetatable.__metatable = "[Enumeration] Requested metatable is locked"
+	EnumerationMetatable.__lt = Comparison
 
 	return Enumeration
 end
