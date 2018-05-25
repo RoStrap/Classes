@@ -1,4 +1,5 @@
 -- Pure-lua implementation of Enums
+-- @author Validark
 
 local Resources = require(game:GetService("ReplicatedStorage"):WaitForChild("Resources"))
 local Debug = Resources:LoadLibrary("Debug")
@@ -36,33 +37,20 @@ end
 local Enumerations = {}
 local EnumerationsArray = SortedArray.new()
 
+function Enumerations:GetEnumerations()
+	return EnumerationsArray:Copy()
+end
+
 local function ReadOnlyNewIndex(_, Index, _)
 	Debug.Error("Cannot write to index [%q]", Index)
 end
 
-local function GetEnumerationsNameCall(Table, MethodName)
-	return function(_, ...)
-		if select(select("#", ...), ...) == MethodName then
-			local Copy = {}
-
-			for i = 1, #Table do
-				Copy[i] = Table[i]
-			end
-
-			return Copy
-		else
-			Debug.Error("The only valid method of this object is \"" .. MethodName .. "\"")
-		end
-	end
-end
-
-local function ConstructUserdata(__index, __newindex, String, __namecall)
+local function ConstructUserdata(__index, __newindex, String)
 	local Enumeration = newproxy(true)
 
 	local EnumerationMetatable = getmetatable(Enumeration)
 	EnumerationMetatable.__index = function(_, Index) return __index[Index] or Debug.Error("[%q] is not a valid EnumerationItem", Index) end
 	EnumerationMetatable.__newindex = __newindex
-	EnumerationMetatable.__namecall = __namecall
 	EnumerationMetatable.__tostring = function() return String end
 	EnumerationMetatable.__metatable = "[Enumeration] Requested metatable is locked"
 
@@ -89,9 +77,19 @@ local function MakeEnumeration(_, EnumType, EnumTypes)
 		EnumContainer[Name] = Item
 	end
 
-	local Enumerator = ConstructUserdata(EnumContainer, ReadOnlyNewIndex, EnumType, GetEnumerationsNameCall(EnumTypes, "GetEnumerationItems"))
+	function EnumContainer:GetEnumerationItems()
+		local EnumerationItems = {}
+
+		for i = 1, #EnumTypes do
+			EnumerationItems[i] = EnumTypes[i]
+		end
+
+		return EnumerationItems
+	end
+
+	local Enumerator = ConstructUserdata(EnumContainer, ReadOnlyNewIndex, EnumType)
 	EnumerationsArray:Insert(Enumerator)
 	Enumerations[EnumType] = Enumerator
 end
 
-return ConstructUserdata(Enumerations, MakeEnumeration, "Enumerations", GetEnumerationsNameCall(EnumerationsArray, "GetEnumerations"))
+return ConstructUserdata(Enumerations, MakeEnumeration, "Enumerations")
