@@ -1,4 +1,5 @@
 -- Rigidly defined PseudoInstance class system based on Roblox classes
+-- @author Validark
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Resources = require(ReplicatedStorage:WaitForChild("Resources"))
@@ -31,7 +32,7 @@ local function Metatable__index(self, i)
 			self.Janitor:Add(Event, "Destroy")
 			rawset(self, i, Event)
 			return Event
-		else
+		elseif ClassTemplate.Internals[i] == nil then
 			Debug.Error("[%q] is not a valid Property of " .. tostring(self), i)
 		end
 	else
