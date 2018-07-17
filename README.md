@@ -1,56 +1,11 @@
-# Enumeration
-Pure-lua implementation that functions identically as Roblox Enums, except you can declare your own:
-
-```lua
-local Enumeration = Resources:LoadLibrary("Enumeration")
-
-Enumeration.ButtonType = {"Custom", "Flat", "Raised"}
-Enumeration.SelectionControllerType = {"Checkbox", "Radio", "Switch"}
-
-local Radio = Enumeration.SelectionControllerType.Radio
-
-print(Radio)
-print(Radio.EnumType)
-print(Radio.Name)
-print(Radio.Value)
-```
-
-```
-> Enumeration.SelectionControllerType.Radio
-> SelectionControllerType
-> Radio
-> 1
-```
-
-Enumerations have a `Value` equal to their index in the declarative array minus one:
-
-|Enumeration.ButtonType = {|"Custom"|"Flat"|"Raised"|}|
-|:-:|:----:|:--:|:----:|:--:|
-||0|1|2||
-
-In this implementation, we use `Enumeration` in the places where Roblox uses `Enum`:
-
-```lua
--- Print all Roblox enums
-for i, EnumType in next, Enum:GetEnums() do
-	print(i, EnumType)
-	for j, EnumName in next, EnumType:GetEnumItems() do
-		print("   ", j, EnumName)
-	end
-end
-
--- Print all RoStrap Enumerations
-for i, EnumType in next, Enumeration:GetEnumerations() do
-	print(i, EnumType)
-	for j, EnumName in next, EnumType:GetEnumerationItems() do
-		print("   ", j, EnumName)
-	end
-end
-```
-
-[Further documentation on Enumerations here.](http://wiki.roblox.com/index.php?title=Enumeration)
-
 # Classes
+
+Click the following links for documentation:
+- [Enumeration](https://rostrap.github.io/Libraries/Classes/Enumeration/)
+- [PseudoInstance](https://rostrap.github.io/Libraries/Classes/PseudoInstance/)
+- [ReplicatedInstance](https://rostrap.github.io/Libraries/Classes/ReplicatedInstance/)
+
+
 Custom classes contributed to RoStrap should follow the following syntax:
 
 ```lua
