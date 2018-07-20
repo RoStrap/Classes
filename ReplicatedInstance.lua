@@ -1,8 +1,7 @@
--- Replicated PseudoInstances, still heavily in-dev and instances MUST be instantiated server-side
+-- Replicated PseudoInstances
 -- @author Validark
--- I don't recommend reading through this unless you enjoy headaches
 -- Notes:
--- Events of ReplicatedInstances should always be fired with LocalPlayer as the first parameter
+--	Events of ReplicatedPseudoInstances should always be fired with LocalPlayer as the first parameter
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -201,7 +200,7 @@ end
 
 local Ids = 0 -- Globally shared Id for instances, would break beyond 2^53 instances ever
 
-return PseudoInstance:Register("ReplicatedInstance", {
+return PseudoInstance:Register("ReplicatedPseudoInstance", {
 	Storage = false; -- Mark this Class as abstract
 	Internals = {"__id"};
 	Properties = {};
