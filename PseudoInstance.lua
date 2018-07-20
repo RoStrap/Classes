@@ -14,8 +14,8 @@ local Enumeration = Resources:LoadLibrary("Enumeration")
 local Templates = Resources:GetLocalTable("Templates")
 local Metatables = setmetatable({}, {__mode = "k"})
 
-local function Metatable__index(self, i)
-	self = Metatables[self] or self
+local function Metatable__index(this, i)
+	local self = Metatables[this] or this
 	local Value = self.__rawdata[i]
 	local ClassTemplate = self.__class
 
@@ -32,7 +32,7 @@ local function Metatable__index(self, i)
 			self.Janitor:Add(Event, "Destroy")
 			rawset(self, i, Event)
 			return Event
-		elseif ClassTemplate.Internals[i] == nil then
+		elseif ClassTemplate.Internals[i] == nil or self ~= this then
 			Debug.Error("[%q] is not a valid Property of " .. tostring(self), i)
 		end
 	else
@@ -50,7 +50,7 @@ local function Metatable__newindex(this, i, v)
 		if Bool == true then
 			self:rawset(i, v)
 		elseif Bool ~= nil then
-			Debug.Error("Cannot set " .. i .. " to " .. tostring(v))
+			Debug.Error("bad argument #3 to " .. i .. ": got %s", v)
 		end
 	elseif self == this and self.__class.Internals[i] ~= nil then
 		rawset(self, i, v)
@@ -140,24 +140,6 @@ local function Filter(this, self, ...)
 			return ...
 		end
 	end
-end
-
--- Make properties of internal objects externally accessible
-local function WrapProperties(self, Object, ...)
-	for i = 1, select("#", ...) do
-		local Property = select(i, ...)
-		self.Properties[Property] = function(this, Value)
-			local Object = this[Object]
-
-			if Object then
-				Object[Property] = Value
-			end
-
-			return true
-		end
-	end
-
-	return self
 end
 
 function PseudoInstance.Register(_, ClassName, ClassData, Superclass)
@@ -253,7 +235,40 @@ function PseudoInstance.Register(_, ClassName, ClassData, Superclass)
 
 	ClassData.Init = ClassData.Init or Empty
 	ClassData.ClassName = ClassName
-	ClassData.WrapProperties = WrapProperties
+
+	-- Make properties of internal objects externally accessible
+	if ClassData.WrappedProperties then
+		for ObjectName, Properties in next, ClassData.WrappedProperties do
+			for i = 1, #Properties do
+				local Property = Properties[i]
+
+				ClassData.Properties[Property] = function(this, Value)
+					local Object = this[ObjectName]
+
+					if Object then
+						Object[Property] = Value
+					end
+
+					return true
+				end
+			end
+
+			local PreviousInit = ClassData.Init
+			ClassData.Init = function(self, ...)
+				PreviousInit(self, ...)
+
+				for i = 1, #Properties do
+					local Property = Properties[i]
+					local Object = self[ObjectName]
+					if self[Property] == nil and Object and Object[Property] ~= nil then
+						self[Property] = Object[Property]
+					end
+				end
+			end
+		end
+	end
+
+	ClassData.WrappedProperties = nil
 	local LockedClass = Table.Lock(ClassData)
 	Templates[ClassName] = LockedClass
 	return LockedClass
@@ -280,7 +295,7 @@ local function ChildNamePrecedesObject(ChildName, b)
 end
 
 PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userdata class with `.new()` instantiator
-	Internals = {"Children", "PropertyChangedSignals"};
+	Internals = {"Children", "PropertyChangedSignals", "Janitor"};
 
 	Properties = { -- Only Indeces within this table are writable, and these are the default values
 		Archivable = Enumeration.ValueType.Boolean; -- Values written to these indeces must match the initial type (unless it is a function, see below)
@@ -513,8 +528,8 @@ function PseudoInstance.new(ClassName, ...)
 
 	Metatables[self] = setmetatable(Mt, Mt)
 
-	Mt:superinit(...)
 	Mt.Janitor:Add(self, "Destroy")
+	Mt:superinit(...)
 
 	return self
 end
@@ -530,7 +545,7 @@ function PseudoInstance.Make(ClassName, Properties, ...)
 	for Property, Value in next, Properties do
 		if type(Property) == "number" then
 			Value.Parent = Object
-		else
+		elseif Object[Property] ~= Value then
 			Object[Property] = Value
 		end
 	end
