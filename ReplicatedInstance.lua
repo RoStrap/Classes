@@ -1,4 +1,5 @@
 -- Replicated PseudoInstances, still heavily in-dev and instances MUST be instantiated server-side
+-- @author Validark
 -- I don't recommend reading through this unless you enjoy headaches
 -- Notes:
 -- Events of ReplicatedInstances should always be fired with LocalPlayer as the first parameter
@@ -69,15 +70,19 @@ local function EqualParentalDepths(a, b)
 end
 
 local function IsDescendantOfAPlayer(Object)
-	local Playerlist = Players:GetPlayers()
-	for i = 1, #Playerlist do
-		local Player = Playerlist[i]
-		if Object:IsDescendantOf(Player) then
-			return Player
+	if Object.ClassName == "Player" then
+		return Object
+	else
+		local Playerlist = Players:GetPlayers()
+		for i = 1, #Playerlist do
+			local Player = Playerlist[i]
+			if Object:IsDescendantOf(Player) then
+				return Player
+			end
 		end
-	end
 
-	return false
+		return false
+	end
 end
 
 local function OnPropertyChanged(self, i, v)
@@ -122,9 +127,13 @@ local function OnPropertyChanged(self, i, v)
 			end
 		end
 		ReplicatedInstances[Id] = nil
-
 	elseif ReplicatedInstances[Id] then
 		FireAllClients(self.__class.ClassName, Id, i, v)
+	else
+		local PlayerToReplicateTo = v:IsDescendantOf("Players") and IsDescendantOfAPlayer(v)
+		if PlayerToReplicateTo then
+			FireClient(PlayerToReplicateTo, self.__class.ClassName, Id, i, v)
+		end
 	end
 end
 
@@ -199,8 +208,10 @@ return PseudoInstance:Register("ReplicatedInstance", {
 	Events = {};
 	Methods = {
 		Destroy = function(self)
-			ReplicatedInstances[self.__id] = nil
-			self.__class.Storage[self.__id] = nil
+			if self.__id then
+				ReplicatedInstances[self.__id] = nil
+				self.__class.Storage[self.__id] = nil
+			end
 			self:super("Destroy")
 		end;
 	};
@@ -208,26 +219,28 @@ return PseudoInstance:Register("ReplicatedInstance", {
 	Init = function(self, Id)
 		self:superinit()
 
-		if not Id then
-			Id = Ids + 1
-			Ids = Id
-		end
-
-		self.__id = Id
-
 		if ReplicateToClients then
+			if not Id then
+				Id = Ids + 1
+				Ids = Id
+			end
 			self.Changed:Connect(OnPropertyChanged, self)
 		elseif ReplicateToServer then
-			for Event in next, self.__class.Events do
-				if Event ~= "Changed" then
-					self[Event]:Connect(function(...)
-						RemoteEvent:FireServer(self.__class.ClassName, Id, Event, ...)
-					end)
+			if Id then
+				for Event in next, self.__class.Events do
+					if Event ~= "Changed" then
+						self[Event]:Connect(function(...)
+							RemoteEvent:FireServer(self.__class.ClassName, Id, Event, ...)
+						end)
+					end
 				end
 			end
 		end
 
-		(self.__class.Storage or Debug.Error(self.__class.ClassName .. " is an abstract class and cannot be instantiated"))[Id] = self
-		ReplicatedInstances[Id] = self
+		if Id then
+			(self.__class.Storage or Debug.Error(self.__class.ClassName .. " is an abstract class and cannot be instantiated"))[Id] = self
+			self.__id = Id
+			ReplicatedInstances[Id] = self
+		end
 	end;
 })
