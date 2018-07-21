@@ -12,10 +12,10 @@ local SortedArray = Resources:LoadLibrary("SortedArray")
 local Enumeration = Resources:LoadLibrary("Enumeration")
 
 local Templates = Resources:GetLocalTable("Templates")
-local Metatables = setmetatable({}, {__mode = "k"})
+local Metatables = setmetatable({}, {__mode = "kv"})
 
 local function Metatable__index(this, i)
-	local self = Metatables[this] or this
+	local self = Metatables[this] or this -- self is the internal copy
 	local Value = self.__rawdata[i]
 	local ClassTemplate = self.__class
 
@@ -27,11 +27,16 @@ local function Metatable__index(this, i)
 
 	if Value == nil and not ClassTemplate.Properties[i] then
 		local GetEventConstructorAndDestructorFunction = ClassTemplate.Events[i]
+
 		if GetEventConstructorAndDestructorFunction ~= nil then
-			local Event = Signal.new(GetEventConstructorAndDestructorFunction and GetEventConstructorAndDestructorFunction(self))
-			self.Janitor:Add(Event, "Destroy")
-			rawset(self, i, Event)
-			return Event
+			if self == this then -- if internal access
+				local Event = Signal.new(GetEventConstructorAndDestructorFunction and GetEventConstructorAndDestructorFunction(self))
+				self.Janitor:Add(Event, "Destroy")
+				rawset(self, i, Event)
+				return Event
+			else
+				return self[i].Event
+			end
 		elseif ClassTemplate.Internals[i] == nil or self ~= this then
 			Debug.Error("[%q] is not a valid Property of " .. tostring(self), i)
 		end
@@ -42,7 +47,7 @@ end
 
 local function Metatable__newindex(this, i, v)
 	local self = Metatables[this] or this
-	local Type = self.__assigners and self.__assigners[i] or self.__class.Properties[i]
+	local Type = self.__class.Properties[i]
 
 	if Type then
 		local Bool = Type(self, v)
@@ -63,13 +68,8 @@ local function Metatable__tostring(self)
 	return (Metatables[self] or self).__class.ClassName
 end
 
-local function Metatable__rawset(self, Property, Value, Bool)
+local function Metatable__rawset(self, Property, Value)
 	self.__rawdata[Property] = Value
-
-	if Bool then
-		-- Add a means for controlling when exactly a property changed signal fires?
-	end
-
 	return self
 end
 
@@ -140,6 +140,39 @@ local function Filter(this, self, ...)
 			return ...
 		end
 	end
+end
+
+local function SortByName(a, b)
+	return a.Name < b.Name
+end
+
+local function ParentalChange(self, Parent)
+	local this = Metatables[Parent]
+
+	if this then
+		this.Children:Insert(self)
+	end
+end
+
+local function ChildNameMatchesObject(ChildName, b)
+	return ChildName == b.Name
+end
+
+local function ChildNamePrecedesObject(ChildName, b)
+	return ChildName < b.Name
+end
+
+local function superinit(self, ...)
+	local CurrentClass = self.currentclass
+
+	if CurrentClass.HasSuperclass then
+		self.currentclass = CurrentClass.Superclass
+	else
+		self.currentclass = nil
+		self.superinit = nil
+	end
+
+	CurrentClass.Init(self, ...)
 end
 
 function PseudoInstance.Register(_, ClassName, ClassData, Superclass)
@@ -274,28 +307,29 @@ function PseudoInstance.Register(_, ClassName, ClassData, Superclass)
 	return LockedClass
 end
 
-local function SortByName(a, b)
-	return a.Name < b.Name
+local function SetEventActive(Event)
+	Event.Active = true
 end
 
-local function ParentalChange(self, Parent)
-	local this = Metatables[Parent]
-
-	if this then
-		this.Children:Insert(self)
-	end
-end
-
-local function ChildNameMatchesObject(ChildName, b)
-	return ChildName == b.Name
-end
-
-local function ChildNamePrecedesObject(ChildName, b)
-	return ChildName < b.Name
+local function SetEventInactive(Event)
+	Event.Active = false
 end
 
 PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userdata class with `.new()` instantiator
-	Internals = {"Children", "PropertyChangedSignals", "Janitor"};
+	Internals = {
+		"Children", "PropertyChangedSignals", "Janitor";
+
+		rawset = function(self, Property, Value)
+			self.__rawdata[Property] = Value
+			local PropertyChangedSignal = self.PropertyChangedSignals and self.PropertyChangedSignals[Property]
+
+			if PropertyChangedSignal and PropertyChangedSignal.Active then
+				PropertyChangedSignal:Fire()
+			end
+
+			return self
+		end;
+	};
 
 	Properties = { -- Only Indeces within this table are writable, and these are the default values
 		Archivable = Enumeration.ValueType.Boolean; -- Values written to these indeces must match the initial type (unless it is a function, see below)
@@ -305,26 +339,15 @@ PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userd
 
 	Events = {
 		Changed = function(self)
-			local Assigned = {}
+			local Assigned = Janitor.new()
 
 			return function(Event)
-				local CurrentClass = self.__class
-				repeat
-					for Property in next, CurrentClass.Properties do
-						if not Assigned[Property] then -- Allow for overwriting Properties in child classes
-							Assigned[Property] = self:GetPropertyChangedSignal(Property):Connect(function(Value)
-								Event:Fire(Property, Value)
-							end)
-						end
-					end
-					CurrentClass = CurrentClass.HasSuperclass and CurrentClass.Superclass
-				until not CurrentClass
-			end, function()
-				for Property, Connection in next, Assigned do
-					Connection:Disconnect()
-					Assigned[Property] = nil
+				for Property in next, self.__class.Properties do
+					Assigned:Add(self:GetPropertyChangedSignal(Property):Connect(function(Value)
+						Event:Fire(Property, Value)
+					end), "Disconnect")
 				end
-			end
+			end, Assigned
 		end;
 	};
 
@@ -369,44 +392,13 @@ PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userd
 			local PropertyChangedSignal = self.PropertyChangedSignals[String]
 
 			if not PropertyChangedSignal then
-				local ClassTemplate = self.__class
 				if not self.__class.Properties[String] then Debug.Error("%s is not a valid Property of PseudoInstance", String) end
-				local Function -- Get previous setter function
-				local CurrentClass = ClassTemplate
-				repeat
-					for Property, Func in next, CurrentClass.Properties do
-						if Property == String then
-							Function = Func
-							break
-						end
-					end
-					CurrentClass = CurrentClass.HasSuperclass and CurrentClass.Superclass
-				until Function or not CurrentClass
-
-				PropertyChangedSignal = Signal.new(function(Event)
-					local assigners = self.__assigners
-
-					if not assigners then
-						assigners = {}
-						self.__assigners = assigners
-					end
-
-					assigners[String] = function(this, Value)
-						local Bool = Function(this, Value)
-						if Bool then
-							self:rawset(String, Value)
-							Event:Fire(Value)
-						end
-						return Bool
-					end
-				end, function()
-					self.__assigners[String] = nil
-				end)
-
+				PropertyChangedSignal = Signal.new(SetEventActive, SetEventInactive)
+				self.Janitor:Add(PropertyChangedSignal, "Destroy")
 				self.PropertyChangedSignals[String] = PropertyChangedSignal
 			end
 
-			return PropertyChangedSignal
+			return PropertyChangedSignal.Event
 		end;
 
 		FindFirstChild = function(self, ChildName, Recursive)
@@ -452,6 +444,17 @@ PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userd
 			self.Archivable = false
 			self.Parent = nil
 			self.Janitor:Cleanup()
+
+			-- Nuke the object
+			if self.__rawdata then
+				for i in next, self.__rawdata do
+					rawset(self.__rawdata, i, nil)
+				end
+			end
+
+			for i in next, self do
+				rawset(self, i, nil)
+			end
 		end;
 	};
 
@@ -473,19 +476,6 @@ PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userd
 	end;
 }, false)
 
-local function superinit(self, ...)
-	local CurrentClass = self.currentclass
-
-	if CurrentClass.HasSuperclass then
-		self.currentclass = CurrentClass.Superclass
-	else
-		self.currentclass = nil
-		self.superinit = nil
-	end
-
-	CurrentClass.Init(self, ...)
-end
-
 function PseudoInstance.new(ClassName, ...)
 	local Class = Templates[ClassName]
 
@@ -501,6 +491,9 @@ function PseudoInstance.new(ClassName, ...)
 	local self = newproxy(true)
 	local Mt = getmetatable(self)
 
+	-- This one can be overwritten by an internal function if so desired :D
+	Mt.rawset = Metatable__rawset
+
 	for i, v in next, Class.Internals do
 		Mt[i] = v
 	end
@@ -511,12 +504,10 @@ function PseudoInstance.new(ClassName, ...)
 	Mt.__rawdata = {}
 	Mt.__newindex = Metatable__newindex
 	Mt.__tostring = Metatable__tostring
-	Mt.__assigners = false -- If somebody uses GetPropertyChangedSignal, then this will become an internal table of property setter functions
 	Mt.__metatable = "[PseudoInstance] Locked metatable"
 	Mt.__type = ClassName -- Calling `typeof` will error without having this value :/
 
 	-- Internally accessible methods
-	Mt.rawset = Metatable__rawset
 	Mt.super = Metatable__super
 
 	-- These two are only around for instantiation and are cleared after a successful and full instantiation
