@@ -25,10 +25,8 @@ local Templates = Resources:GetLocalTable("Templates")
 local RemoteEvent = Resources:GetRemoteEvent("PseudoInstanceReplicator")
 local RemoteFunction = Resources:GetRemoteFunction("PseudoInstanceStartupVerify")
 
-local WeakHash = {__mode = "k"}
-
-local ReplicatedInstances = setmetatable({}, WeakHash)
-local LoadedPlayers = setmetatable({}, WeakHash)
+local ReplicatedInstances = {}
+local LoadedPlayers = setmetatable({}, {__mode = "k"})
 
 local function YieldUntilReadyToFire(Player, ...)
 	repeat until LoadedPlayers[Player] or not wait()
