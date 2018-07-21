@@ -82,7 +82,8 @@ local function IsDescendantOfAPlayer(Object)
 	end
 end
 
-local function OnPropertyChanged(self, i, v)
+local function OnPropertyChanged(self, i)
+	local v = self[i]
 	local Id = self.__id
 
 	if i == "Parent" then
