@@ -324,7 +324,7 @@ PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userd
 			local PropertyChangedSignal = self.PropertyChangedSignals and self.PropertyChangedSignals[Property]
 
 			if PropertyChangedSignal and PropertyChangedSignal.Active then
-				PropertyChangedSignal:Fire()
+				PropertyChangedSignal:Fire(Value)
 			end
 
 			return self
