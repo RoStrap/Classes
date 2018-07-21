@@ -146,8 +146,8 @@ local function SortByName(a, b)
 	return a.Name < b.Name
 end
 
-local function ParentalChange(self, Parent)
-	local this = Metatables[Parent]
+local function ParentalChange(self)
+	local this = Metatables[self.Parent]
 
 	if this then
 		this.Children:Insert(self)
@@ -343,8 +343,8 @@ PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userd
 
 			return function(Event)
 				for Property in next, self.__class.Properties do
-					Assigned:Add(self:GetPropertyChangedSignal(Property):Connect(function(Value)
-						Event:Fire(Property, Value)
+					Assigned:Add(self:GetPropertyChangedSignal(Property):Connect(function()
+						Event:Fire(Property)
 					end), "Disconnect")
 				end
 			end, Assigned
