@@ -6,6 +6,8 @@ Click the following links for documentation:
 - [ReplicatedPseudoInstance](https://rostrap.github.io/Libraries/Classes/ReplicatedPseudoInstance/)
 
 
+## Contributing
+
 Custom classes contributed to RoStrap should follow the following syntax:
 
 ```lua
