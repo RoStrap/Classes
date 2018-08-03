@@ -3,7 +3,7 @@
 Click the following links for documentation:
 - [Enumeration](https://rostrap.github.io/Libraries/Classes/Enumeration/)
 - [PseudoInstance](https://rostrap.github.io/Libraries/Classes/PseudoInstance/)
-- [ReplicatedInstance](https://rostrap.github.io/Libraries/Classes/ReplicatedInstance/)
+- [ReplicatedPseudoInstance](https://rostrap.github.io/Libraries/Classes/ReplicatedPseudoInstance/)
 
 
 Custom classes contributed to RoStrap should follow the following syntax:
