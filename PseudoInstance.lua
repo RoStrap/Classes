@@ -1,4 +1,4 @@
--- Rigidly defined PseudoInstance class system based on Roblox classes
+-- Rigidly defined PseudoInstance class system to instantiate Roblox-like instances
 -- @author Validark
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -6,6 +6,7 @@ local Resources = require(ReplicatedStorage:WaitForChild("Resources"))
 
 local Debug = Resources:LoadLibrary("Debug")
 local Table = Resources:LoadLibrary("Table")
+local Typer = Resources:LoadLibrary("Typer")
 local Signal = Resources:LoadLibrary("Signal")
 local Janitor = Resources:LoadLibrary("Janitor")
 local SortedArray = Resources:LoadLibrary("SortedArray")
@@ -31,7 +32,6 @@ local function Metatable__index(this, i)
 		if GetEventConstructorAndDestructorFunction ~= nil then
 			if self == this then -- if internal access
 				local Event = Signal.new(GetEventConstructorAndDestructorFunction and GetEventConstructorAndDestructorFunction(self))
-				self.Janitor:Add(Event, "Destroy")
 				rawset(self, i, Event)
 				return Event
 			else
@@ -50,13 +50,7 @@ local function Metatable__newindex(this, i, v)
 	local Type = self.__class.Properties[i]
 
 	if Type then
-		local Bool = Type(self, v)
-
-		if Bool == true then
-			self:rawset(i, v)
-		elseif Bool ~= nil then
-			Debug.Error("bad argument #3 to " .. i .. ": got %s", v)
-		end
+		Type(self, v)
 	elseif self == this and self.__class.Internals[i] ~= nil then
 		rawset(self, i, v)
 	else
@@ -88,26 +82,11 @@ local function Metatable__super(self, MethodName, ...)
 	return Debug.Error("Could not find parent method " .. MethodName)
 end
 
-Enumeration.ValueType = {
-	"String", "Number", "Boolean", "Table", "Coroutine", "EnumItem",
-	"Axes", "BrickColor", "CFrame", "Color3", "ColorSequence", "Faces",
-	"Reference", "NumberRange", "NumberSequence", "PathWaypoint", "PhysicalProperties",
-	"Random", "Ray", "Rect", "Region3", "Region3int16", "TweenInfo", "UDim", "UDim2",
-	"Vector2", "Vector3", "Vector3int16"
-}
-
-local ValueTypes = Enumeration.ValueType:GetEnumerationItems()
-
 local PseudoInstance = {}
 
-local TypeChecker = {
-	[Enumeration.ValueType.Reference.Value] = function(_, Value)
-		return Value == nil or typeof(Value) == "Instance"
-	end;
-}
-
-local function Empty() end
-local function CompareToString(a, b) return tostring(a) < tostring(b) end
+local function DefaultInit(self, ...)
+	self:superinit(...)
+end
 local DataTableNames = SortedArray.new{"Events", "Methods", "Properties", "Internals"}
 local MethodIndex = DataTableNames:Find("Methods")
 
@@ -119,6 +98,7 @@ local function Filter(this, self, ...)
 
 	if ArgumentCount > 2 then
 		local Arguments
+
 		for i = 1, ArgumentCount do
 			if select(i, ...) == this then
 				Arguments = {...} -- Create a table if absolutely necessary
@@ -133,6 +113,8 @@ local function Filter(this, self, ...)
 				return unpack(Arguments)
 			end
 		end
+
+		return ...
 	else
 		if this == ... then -- Optimize for most cases where they only returned a single parameter
 			return self
@@ -140,26 +122,6 @@ local function Filter(this, self, ...)
 			return ...
 		end
 	end
-end
-
-local function SortByName(a, b)
-	return a.Name < b.Name
-end
-
-local function ParentalChange(self)
-	local this = Metatables[self.Parent]
-
-	if this then
-		this.Children:Insert(self)
-	end
-end
-
-local function ChildNameMatchesObject(ChildName, b)
-	return ChildName == b.Name
-end
-
-local function ChildNamePrecedesObject(ChildName, b)
-	return ChildName < b.Name
 end
 
 local function superinit(self, ...)
@@ -186,34 +148,11 @@ function PseudoInstance.Register(_, ClassName, ClassData, Superclass)
 		end
 	end
 
-	local Enumerations = SortedArray.new(Enumeration:GetEnumerations(), CompareToString)
-
-	for Property, ValueType in next, ClassData.Properties do
-		if type(ValueType) ~= "function" then
-			local Position = Enumerations:Find(ValueType)
-
-			if Position then
-				local EnumerationType = Enumerations[Position]
-
-				ClassData.Properties[Property] = function(self, Value)
-					self:rawset(Property, EnumerationType:Cast(Value))
-				end
-			else
-				local Index = Enumeration.ValueType:Cast(ValueType).Value
-				local TypeCheck = TypeChecker[Index]
-
-				if not TypeCheck then
-					local Type = ValueTypes[Index + 1].Name:lower()
-
-					function TypeCheck(_, Value)
-						return typeof(Value):lower() == Type
-					end
-
-					TypeChecker[Index] = TypeCheck
-				end
-
-				ClassData.Properties[Property] = TypeCheck
-			end
+	for Property, Function in next, ClassData.Properties do
+		if type(Function) == "table" then
+			ClassData.Properties[Property] = Typer.AssignSignature(2, Function, function(self, Value)
+				self:rawset(Property, Value)
+			end)
 		end
 	end
 
@@ -266,7 +205,7 @@ function PseudoInstance.Register(_, ClassName, ClassData, Superclass)
 		ClassData.HasSuperclass = false
 	end
 
-	ClassData.Init = ClassData.Init or Empty
+	ClassData.Init = ClassData.Init or DefaultInit
 	ClassData.ClassName = ClassName
 
 	-- Make properties of internal objects externally accessible
@@ -282,7 +221,7 @@ function PseudoInstance.Register(_, ClassName, ClassData, Superclass)
 						Object[Property] = Value
 					end
 
-					return true
+					this:rawset(Property, Value)
 				end
 			end
 
@@ -307,14 +246,6 @@ function PseudoInstance.Register(_, ClassName, ClassData, Superclass)
 	return LockedClass
 end
 
-local function SetEventActive(Event)
-	Event.Active = true
-end
-
-local function SetEventInactive(Event)
-	Event.Active = false
-end
-
 PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userdata class with `.new()` instantiator
 	Internals = {
 		"Children", "PropertyChangedSignals", "Janitor";
@@ -329,12 +260,40 @@ PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userd
 
 			return self
 		end;
+
+		SortByName = function(a, b)
+			return a.Name < b.Name
+		end;
+
+		ParentalChange = function(self)
+			local this = Metatables[self.Parent]
+
+			if this then
+				this.Children:Insert(self)
+			end
+		end;
+
+		ChildNameMatchesObject = function(ChildName, b)
+			return ChildName == b.Name
+		end;
+
+		ChildNamePrecedesObject = function(ChildName, b)
+			return ChildName < b.Name
+		end;
+
+		SetEventActive = function(Event)
+			Event.Active = true
+		end;
+
+		SetEventInactive = function(Event)
+			Event.Active = false
+		end;
 	};
 
 	Properties = { -- Only Indeces within this table are writable, and these are the default values
-		Archivable = Enumeration.ValueType.Boolean; -- Values written to these indeces must match the initial type (unless it is a function, see below)
-		Parent = Enumeration.ValueType.Reference;
-		Name = Enumeration.ValueType.String;
+		Archivable = Typer.Boolean; -- Values written to these indeces must match the initial type (unless it is a function, see below)
+		Parent = Typer.OptionalInstance;
+		Name = Typer.String;
 	};
 
 	Events = {
@@ -362,7 +321,7 @@ PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userd
 						if Property ~= "Parent" then
 							local Old = self[Property]
 							if Old ~= nil then
-								if TypeChecker[Enumeration.ValueType.Reference.Value](nil, Old) then
+								if Typer.Instance(Old) then
 									Old = Old:Clone()
 								end
 
@@ -393,7 +352,7 @@ PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userd
 
 			if not PropertyChangedSignal then
 				if not self.__class.Properties[String] then Debug.Error("%s is not a valid Property of PseudoInstance", String) end
-				PropertyChangedSignal = Signal.new(SetEventActive, SetEventInactive)
+				PropertyChangedSignal = Signal.new(self.SetEventActive, self.SetEventInactive)
 				self.Janitor:Add(PropertyChangedSignal, "Destroy")
 				self.PropertyChangedSignals[String] = PropertyChangedSignal
 			end
@@ -419,7 +378,7 @@ PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userd
 					end
 				end
 			else -- Much faster than recursive
-				return Children:Find(ChildName, ChildNameMatchesObject, ChildNamePrecedesObject)
+				return Children:Find(ChildName, self.ChildNameMatchesObject, self.ChildNamePrecedesObject)
 			end
 		end;
 
@@ -452,7 +411,11 @@ PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userd
 				end
 			end
 
-			for i in next, self do
+			for i, v in next, self do
+				if Signal.IsA(v) then
+					v:Destroy()
+				end
+
 				rawset(self, i, nil)
 			end
 		end;
@@ -469,10 +432,10 @@ PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userd
 		self:rawset("ClassName", Name)
 
 		-- Internals
-		self.Children = SortedArray.new(nil, SortByName)
+		self.Children = SortedArray.new(nil, self.SortByName)
 		self.PropertyChangedSignals = {}
 
-		self:GetPropertyChangedSignal("Parent"):Connect(ParentalChange, self)
+		self:GetPropertyChangedSignal("Parent"):Connect(self.ParentalChange, self)
 	end;
 }, false)
 
