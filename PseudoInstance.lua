@@ -87,6 +87,7 @@ local PseudoInstance = {}
 local function DefaultInit(self, ...)
 	self:superinit(...)
 end
+
 local DataTableNames = SortedArray.new{"Events", "Methods", "Properties", "Internals"}
 local MethodIndex = DataTableNames:Find("Methods")
 
