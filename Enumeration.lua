@@ -3,50 +3,26 @@
 
 local Resources = require(game:GetService("ReplicatedStorage"):WaitForChild("Resources"))
 local Debug = Resources:LoadLibrary("Debug")
+local Typer = Resources:LoadLibrary("Typer")
 local SortedArray = Resources:LoadLibrary("SortedArray")
 
-local function IsValidArray(Table)
-	-- @returns bool Whether table Table it is a valid array of type {"Type1", "Type2", "Type3"}
+local Error__index = {
+	__index = function(_, i)
+		Debug.Error(tostring(i) .. " is not a valid EnumerationItem")
+	end;
+}
 
-	local Count = 1
-	local HighestIndex = next(Table)
+local Error__index2 = {
+	__index = function(_, i)
+		Debug.Error(tostring(i) .. " is not a valid member")
+	end;
+}
 
-	if type(HighestIndex) == "number" then
-		for i, _ in next, Table, HighestIndex do
-			if type(i) == "number" and HighestIndex < i then
-				HighestIndex = i
-			end
-			Count = Count + 1
-		end
-
-		for i = 1, Count do
-			if type(Table[i]) ~= "string" then
-				return false
-			end
-		end
-	else
-		return false
-	end
-
-	return Count == HighestIndex
-end
-
-local function IsValidDictionary(Table)
-	-- @returns bool Whether table Table it is a valid array of type {Type1 = 1; Type5 = 5}
-
-	for i, v in next, Table do
-		if type(i) ~= "string" or type(v) ~= "number" then
-			return false
-		end
-	end
-
-	return next(Table) and true or false
-end
-
-local Enumerations = {}
 local EnumerationsArray = SortedArray.new(nil, function(Left, Right)
 	return tostring(Left) < tostring(Right)
 end)
+
+local Enumerations = setmetatable({}, Error__index)
 
 function Enumerations:GetEnumerations()
 	return EnumerationsArray:Copy()
@@ -60,132 +36,83 @@ local function CompareEnumTypes(EnumItem1, EnumItem2)
 	return EnumItem1.Value < EnumItem2.Value
 end
 
+local Casts = {}
 local EnumContainerTemplate = {}
-EnumContainerTemplate.__index = {}
+EnumContainerTemplate.__index = setmetatable({}, Error__index)
 
 function EnumContainerTemplate.__index:GetEnumerationItems()
-	return EnumContainerTemplate[self]:Copy()
-end
+	local Array = {}
+	local Count = 0
 
-local function EnumerationNameEquals(a, b)
-	return a == b.Name
-end
-
-local function EnumerationNameLessThan(a, b)
-	return a < b.Name
-end
-
-local function EnumerationValueEquals(a, b)
-	return a == b.Value
-end
-
-local function EnumerationValueLessThan(a, b)
-	return a < b.Value
-end
-
-function EnumContainerTemplate.__index:Cast(Value, DontError)
-	local EnumTypes = EnumContainerTemplate[self]
-	local ValueType = type(Value)
-
-	if ValueType == "number" then
-		if EnumTypes.IsValidArray then
-			local Target = EnumTypes[Value + 1]
-
-			if Target then
-				return Target
-			end
-		else
-			local Position = EnumTypes:Find(Value, EnumerationValueEquals, EnumerationValueLessThan)
-
-			if Position then
-				return EnumTypes[Position]
-			end
-		end
-	elseif ValueType == "string" then
-		if DontError then
-			for i = 1, #EnumTypes do
-				if EnumTypes[i].Name == Value then
-					return self[Value]
-				end
-			end
-		else
-			return self[Value]
-		end
-	elseif ValueType == "userdata" then
-		local Position = EnumTypes:Find(Value)
-
-		if Position then
-			return EnumTypes[Position]
-		end
+	for _, Item in next, EnumContainerTemplate[self] do
+		Count = Count + 1
+		Array[Count] = Item
 	end
 
-	if DontError then
-		return nil
+	table.sort(Array, CompareEnumTypes)
+	return Array
+end
+
+function EnumContainerTemplate.__index:Cast(Value)
+	local Castables = Casts[self]
+	local Cast = Castables[Value]
+
+	if Cast then
+		return Cast
 	else
-		Debug.Error("[%s] is not a valid " .. tostring(self), Value)
+		return false, "[" .. Debug.Inspect(Value) .. "] is not a valid " .. tostring(self)
 	end
 end
 
-local function ConstructUserdata(__index, __newindex, __tostring, SortedEnumTypes)
+local function ConstructUserdata(__index, __newindex, __tostring)
 	local Enumeration = newproxy(true)
 
 	local EnumerationMetatable = getmetatable(Enumeration)
-	EnumerationMetatable.__index = function(_, Index) return __index[Index] or Debug.Error("[%q] is not a valid EnumerationItem", Index) end
+	EnumerationMetatable.__index = __index
 	EnumerationMetatable.__newindex = __newindex
 	EnumerationMetatable.__tostring = function() return __tostring end
 	EnumerationMetatable.__metatable = "[Enumeration] Requested metatable is locked"
 
-	EnumContainerTemplate[Enumeration] = SortedEnumTypes
-
 	return Enumeration
 end
 
-local function MakeEnumeration(_, EnumType, EnumTypes)
-	if type(EnumType) ~= "string" then Debug.Error("Cannot write to non-string key of Enumeration: %s", EnumType) end
-	if type(EnumTypes) ~= "table" then Debug.Error("Expected array of string EnumerationItem Names, got %s", EnumType) end
-	if Enumerations[EnumType] then Debug.Error("Enumeration of EnumType " .. EnumType .. " already exists") end
+local function ConstructEnumerationItem(Name, Value, EnumContainer, LockedEnumContainer, EnumerationStringStub, Castables)
+	local Item = ConstructUserdata(setmetatable({
+		Name = Name;
+		Value = Value;
+		EnumerationType = LockedEnumContainer
+	}, Error__index2), ReadOnlyNewIndex, EnumerationStringStub .. Name, Castables)
 
-	local SortedEnumTypes = SortedArray.new(nil, CompareEnumTypes)
+	Castables[Name] = Item
+	Castables[Value] = Item
+	Castables[Item] = Item
+
+	EnumContainer[Name] = Item
+end
+
+local MakeEnumeration = Typer.AssignSignature(2, Typer.String, Typer.ArrayOfStringsOrDictionaryOfNumbers, function(_, EnumType, EnumTypes)
+	if rawget(Enumerations, EnumType) then Debug.Error("Enumeration of EnumType " .. EnumType .. " already exists") end
+
+	local Castables = {}
 	local EnumContainer = setmetatable({}, EnumContainerTemplate)
-	local LockedEnumContainer = ConstructUserdata(EnumContainer, ReadOnlyNewIndex, EnumType, SortedEnumTypes)
+	local LockedEnumContainer = ConstructUserdata(EnumContainer, ReadOnlyNewIndex, EnumType)
 	local EnumerationStringStub = "Enumeration." .. EnumType .. "."
+	local NumEnumTypes = #EnumTypes
 
-	if IsValidArray(EnumTypes) then
-		SortedEnumTypes.IsValidArray = true
-		for i = 1, #EnumTypes do
-			local Name = EnumTypes[i]
-			local Item = ConstructUserdata({
-				EnumerationType = LockedEnumContainer;
-				Name = Name;
-				Value = i - 1;
-			}, ReadOnlyNewIndex, EnumerationStringStub .. Name)
-
-			SortedEnumTypes[i] = Item
-			EnumContainer[Name] = Item
+	if NumEnumTypes > 0 then
+		for i = 1, NumEnumTypes do
+			ConstructEnumerationItem(EnumTypes[i], i - 1, EnumContainer, LockedEnumContainer, EnumerationStringStub, Castables)
 		end
-	elseif IsValidDictionary(EnumTypes) then
-		SortedEnumTypes.IsValidArray = false
-		local Count = 0
-
-		for Name, Value in next, EnumTypes do
-			local Item = ConstructUserdata({
-				EnumerationType = LockedEnumContainer;
-				Name = Name;
-				Value = Value;
-			}, ReadOnlyNewIndex, EnumerationStringStub .. Name)
-
-			Count = Count + 1
-			SortedEnumTypes[Count] = Item
-			EnumContainer[Name] = Item
-		end
-
-		SortedEnumTypes:Sort()
 	else
-		Debug.Error("Expected table " .. EnumType .. " to be an array of strings of the form {\"Type1\", \"Type2\", \"Type3\"} or a dictionary of the form {Type1 = 1; Type5 = 5}")
+		for Name, Value in next, EnumTypes do
+			ConstructEnumerationItem(Name, Value, EnumContainer, LockedEnumContainer, EnumerationStringStub, Castables)
+		end
 	end
 
+	Casts[LockedEnumContainer] = Castables
+	EnumContainerTemplate[LockedEnumContainer] = EnumContainer
 	EnumerationsArray:Insert(LockedEnumContainer)
 	Enumerations[EnumType] = LockedEnumContainer
-end
+end)
 
 return ConstructUserdata(Enumerations, MakeEnumeration, "Enumerations")
