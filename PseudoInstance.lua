@@ -15,6 +15,8 @@ local Enumeration = Resources:LoadLibrary("Enumeration")
 local Templates = Resources:GetLocalTable("Templates")
 local Metatables = setmetatable({}, {__mode = "kv"})
 
+local function Empty() end
+
 local function Metatable__index(this, i)
 	local self = Metatables[this] or this -- self is the internal copy
 	local Value = self.__rawdata[i]
@@ -27,11 +29,11 @@ local function Metatable__index(this, i)
 	end
 
 	if Value == nil and not ClassTemplate.Properties[i] then
-		local GetEventConstructorAndDestructorFunction = ClassTemplate.Events[i]
+		local GetConstructorAndDestructor = ClassTemplate.Events[i]
 
-		if GetEventConstructorAndDestructorFunction ~= nil then
+		if GetConstructorAndDestructor then
 			if self == this then -- if internal access
-				local Event = Signal.new(GetEventConstructorAndDestructorFunction and GetEventConstructorAndDestructorFunction(self))
+				local Event = Signal.new(GetConstructorAndDestructor(self))
 				rawset(self, i, Event)
 				return Event
 			else
@@ -157,14 +159,18 @@ function PseudoInstance.Register(_, ClassName, ClassData, Superclass)
 		end
 	end
 
-	local Data = ClassData.Internals
+	local Internals = ClassData.Internals
 
-	for _ = 1, 2 do
-		for i = 1, #Data do
-			Data[Data[i]] = false
-			Data[i] = nil
-		end
-		Data = ClassData.Events
+	for i = 1, #Internals do
+		Internals[Internals[i]] = false
+		Internals[i] = nil
+	end
+
+	local Events = ClassData.Events
+
+	for i = 1, #Events do
+		Events[Events[i]] = Empty
+		Events[i] = nil
 	end
 
 	ClassData.Abstract = false
