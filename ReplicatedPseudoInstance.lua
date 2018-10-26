@@ -1,7 +1,31 @@
--- Replicated PseudoInstances
+-- Auto-Replicating PseudoInstances
+-- @documentation https://rostrap.github.io/Libraries/Classes/ReplicatedPseudoInstance/
 -- @author Validark
--- Notes:
---	Events of ReplicatedPseudoInstances should always be fired with LocalPlayer as the first parameter
+
+--[[
+	ReplicatedPseudoInstances are PseudoInstances which, when inherited from, automatically replicate.
+
+	CONSTRAINTS:
+		You can't have read-only values in a class which auto-replicates.
+			If you want that, use internal values and make a Get() function
+		Events of ReplicatedPseudoInstances should always be fired with LocalPlayer as the first parameter
+
+	BEHAVIOR:
+		PseudoInstances, when instantiated, replicate to all subscribers.
+			A "subscriber" is a Player which objects should be replicated to.
+			A single Player is a subscriber if the Object is a Descendant of their Player object
+			Every Player is a Subscriber if the Object is or is a Descendant of Workspace or ReplicatedStorage
+
+		Replication has two phases:
+			Initial Replication: this is when a table value is sent over with all the data in an object
+			Partial Replication: this is when a single property is updated
+
+	IMPLEMENTATION:
+		PseudoInstances with lower ParentalDepth are replicated before Objects with higher ParentalDepths
+			A ParentalDepth is the number of Parents an Object has before reaching game
+			This must be the case, because we can't replicate Objects which are parented to other PseudoInstances until after those Parental PseudoInstances exist
+
+--]]
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -25,17 +49,17 @@ local Templates = Resources:GetLocalTable("Templates")
 local RemoteEvent = Resources:GetRemoteEvent("PseudoInstanceReplicator")
 local RemoteFunction = Resources:GetRemoteFunction("PseudoInstanceStartupVerify")
 
-local ReplicatedInstances = {}
+local AutoReplicatedInstances = {}
 local LoadedPlayers = setmetatable({}, {__mode = "k"})
+
+local FireClient
 
 local function YieldUntilReadyToFire(Player, ...)
 	repeat until LoadedPlayers[Player] or not wait()
-	local Old = LoadedPlayers[Player]
-	LoadedPlayers[Player] = Old + 1
-	RemoteEvent:FireClient(Player, Old + 1, ...)
+	FireClient(Player, ...)
 end
 
-local function FireClient(Player, ...)
+function FireClient(Player, ...)
 	local Old = LoadedPlayers[Player]
 
 	if Old then
@@ -59,28 +83,15 @@ local ParentalDepths = {}
 -- A SortedArray of Ids to objects sorted according to Parental depth
 -- This will ensure that you don't replicate child instances and try to set their parents before the parents exist
 local ReplicationOrder = SortedArray.new(nil, function(a, b)
-	return ParentalDepths[a] < ParentalDepths[b]
-end)
+	local d_a = ParentalDepths[a]
+	local d_b = ParentalDepths[b]
 
-local function EqualParentalDepths(a, b)
-	return ParentalDepths[a] == ParentalDepths[b]
-end
-
-local function IsDescendantOfAPlayer(Object)
-	if Object.ClassName == "Player" then
-		return Object
+	if d_a == d_b then
+		return a < b
 	else
-		local Playerlist = Players:GetPlayers()
-		for i = 1, #Playerlist do
-			local Player = Playerlist[i]
-			if Object:IsDescendantOf(Player) then
-				return Player
-			end
-		end
-
-		return false
+		return d_a < d_b
 	end
-end
+end)
 
 local function OnPropertyChanged(self, i)
 	local v = self[i]
@@ -91,8 +102,11 @@ local function OnPropertyChanged(self, i)
 			local ReplicateToAllPlayers = v == Players or v == Workspace or v == ReplicatedStorage or v:IsDescendantOf(Workspace) or v:IsDescendantOf(ReplicatedStorage)
 			local PlayerToReplicateTo
 
-			if not ReplicateToAllPlayers then
-				PlayerToReplicateTo = v:IsDescendantOf("Players") and IsDescendantOfAPlayer(v)
+			if not ReplicateToAllPlayers and v:IsDescendantOf(Players) then
+				PlayerToReplicateTo = v
+				while PlayerToReplicateTo.ClassName ~= "Player" do
+					PlayerToReplicateTo = PlayerToReplicateTo.Parent
+				end
 			end
 
 			-- If replicating to the server, we want to cache these and replicate them upon player joining (conditional upon parent)
@@ -106,16 +120,15 @@ local function OnPropertyChanged(self, i)
 					ParentalDepth = ParentalDepth + 1
 				until Current == nil
 
-				local Position = ReplicationOrder:Find(Id, EqualParentalDepths)
+				local Position = ReplicationOrder:Find(Id)
 				ParentalDepths[Id] = ParentalDepth
+				AutoReplicatedInstances[Id] = self
 
 				if Position then
 					ReplicationOrder:SortIndex(Position)
 				else
 					ReplicationOrder:Insert(Id)
 				end
-
-				ReplicatedInstances[Id] = self
 
 				FireAllClients(self.__class.ClassName, Id, self.__rawdata)
 
@@ -124,14 +137,20 @@ local function OnPropertyChanged(self, i)
 				FireClient(PlayerToReplicateTo, self.__class.ClassName, Id, self.__rawdata)
 			end
 		end
-		ReplicatedInstances[Id] = nil
-	elseif ReplicatedInstances[Id] then
+
+		AutoReplicatedInstances[Id] = nil
+		ReplicationOrder:RemoveElement(Id)
+
+	elseif AutoReplicatedInstances[Id] then
 		FireAllClients(self.__class.ClassName, Id, i, v)
-	else
-		local PlayerToReplicateTo = v:IsDescendantOf("Players") and IsDescendantOfAPlayer(v)
-		if PlayerToReplicateTo then
-			FireClient(PlayerToReplicateTo, self.__class.ClassName, Id, i, v)
+	elseif self:IsDescendantOf(Players) then
+		local PlayerToReplicateTo = self.Parent
+
+		while PlayerToReplicateTo.ClassName ~= "Player" do
+			PlayerToReplicateTo = PlayerToReplicateTo.Parent
 		end
+
+		FireClient(PlayerToReplicateTo, self.__class.ClassName, Id, i, v)
 	end
 end
 
@@ -142,7 +161,7 @@ if ReplicateToClients then
 
 			for i = 1, NumReplicationOrder do
 				local Id = ReplicationOrder[i]
-				local self = ReplicatedInstances[Id]
+				local self = AutoReplicatedInstances[Id]
 
 				RemoteEvent:FireClient(Player, i, self.__class.ClassName, Id, self.__rawdata)
 			end
@@ -151,7 +170,7 @@ if ReplicateToClients then
 		end
 	end)
 
-	RemoteEvent.OnServerEvent:Connect(function(Player, ClassName, Id, Event, ...) -- Fire events on the Server when they are fired on the client
+	RemoteEvent.OnServerEvent:Connect(function(Player, ClassName, Id, Event, ...) -- Fire events on the Server after they are fired on the client
 		Event = (Templates[ClassName].Storage[Id] or Debug.Error("Object not found"))[Event]
 		-- On the server, the first parameter will always be Player. This removes a duplicate.
 		-- This also adds some security because a client cannot simply spoof it
@@ -207,8 +226,9 @@ return PseudoInstance:Register("ReplicatedPseudoInstance", {
 	Methods = {
 		Destroy = function(self)
 			if self.__id then
-				ReplicatedInstances[self.__id] = nil
+				AutoReplicatedInstances[self.__id] = nil
 				self.__class.Storage[self.__id] = nil
+				ReplicationOrder:RemoveElement(self.__id)
 			end
 			self:super("Destroy")
 		end;
@@ -238,7 +258,6 @@ return PseudoInstance:Register("ReplicatedPseudoInstance", {
 		if Id then
 			(self.__class.Storage or Debug.Error(self.__class.ClassName .. " is an abstract class and cannot be instantiated"))[Id] = self
 			self.__id = Id
-			ReplicatedInstances[Id] = self
 		end
 	end;
 })
