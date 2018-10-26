@@ -70,14 +70,19 @@ function FireClient(Player, ...)
 	end
 end
 
-local function FireAllClients(...)
+local function FireAllClientsExcept(Player1, ...)
 	local Playerlist = Players:GetPlayers()
 
 	for i = 1, #Playerlist do
-		FireClient(Playerlist[i], ...)
+		local Player2 = Playerlist[i]
+
+		if Player1 ~= Player2 then
+			FireClient(Player2, ...)
+		end
 	end
 end
 
+local SubscribingIndividuals = {} -- For when only ONE player receives updates
 local ParentalDepths = {}
 
 -- A SortedArray of Ids to objects sorted according to Parental depth
@@ -93,14 +98,27 @@ local ReplicationOrder = SortedArray.new(nil, function(a, b)
 	end
 end)
 
+local function ReplicateUpdateToInterestedParties(self, Id, i, v)
+	if AutoReplicatedInstances[Id] then
+		FireAllClientsExcept(nil, self.__class.ClassName, Id, i, v)
+	else
+		local PlayerToReplicateTo = SubscribingIndividuals[Id]
+
+		if PlayerToReplicateTo then
+			FireClient(PlayerToReplicateTo, self.__class.ClassName, Id, i, v)
+		end
+	end
+end
+
 local function OnPropertyChanged(self, i)
 	local v = self[i]
 	local Id = self.__id
 
 	if i == "Parent" then
+		local PlayerToReplicateTo
+
 		if v then
 			local ReplicateToAllPlayers = v == Players or v == Workspace or v == ReplicatedStorage or v:IsDescendantOf(Workspace) or v:IsDescendantOf(ReplicatedStorage)
-			local PlayerToReplicateTo
 
 			if not ReplicateToAllPlayers and v:IsDescendantOf(Players) then
 				PlayerToReplicateTo = v
@@ -130,27 +148,34 @@ local function OnPropertyChanged(self, i)
 					ReplicationOrder:Insert(Id)
 				end
 
-				FireAllClients(self.__class.ClassName, Id, self.__rawdata)
+				FireAllClientsExcept(SubscribingIndividuals[Id], self.__class.ClassName, Id, self.__rawdata)
+				SubscribingIndividuals[Id] = nil
 
 				return
 			elseif PlayerToReplicateTo then
+				SubscribingIndividuals[Id] = PlayerToReplicateTo
 				FireClient(PlayerToReplicateTo, self.__class.ClassName, Id, self.__rawdata)
 			end
 		end
 
-		AutoReplicatedInstances[Id] = nil
-		ReplicationOrder:RemoveElement(Id)
+		if not PlayerToReplicateTo then
+			local PreviousSubscriber = SubscribingIndividuals[Id]
 
-	elseif AutoReplicatedInstances[Id] then
-		FireAllClients(self.__class.ClassName, Id, i, v)
-	elseif self:IsDescendantOf(Players) then
-		local PlayerToReplicateTo = self.Parent
-
-		while PlayerToReplicateTo.ClassName ~= "Player" do
-			PlayerToReplicateTo = PlayerToReplicateTo.Parent
+			if PreviousSubscriber then
+				FireClient(PreviousSubscriber, self.__class.ClassName, Id)
+				SubscribingIndividuals[Id] = nil
+			end
 		end
 
-		FireClient(PlayerToReplicateTo, self.__class.ClassName, Id, i, v)
+		-- If Parent was set to something that doesn't ReplicateToAllPlayers, take it out of auto-replicate
+		if AutoReplicatedInstances[Id] then -- Destroy the element if it was previously replicating
+			-- Destroy for everyone but who we are now replicating to (may be nil)
+			FireAllClientsExcept(PlayerToReplicateTo, self.__class.ClassName, Id)
+			AutoReplicatedInstances[Id] = nil
+			ReplicationOrder:RemoveElement(Id)
+		end
+	else
+		ReplicateUpdateToInterestedParties(self, Id, i, v)
 	end
 end
 
@@ -190,22 +215,27 @@ elseif ReplicateToServer then
 			Template = Templates[ClassName] or Debug.Error("Invalid ClassName")
 		end
 
-		local LocalTable = Template.Storage
-		local Object = LocalTable[Id]
+		local Object = Template.Storage[Id]
 
 		if not Object then
 			Object = PseudoInstance.new(ClassName, Id)
-			LocalTable[Id] = Object
+			Template.Storage[Id] = Object
 		end
 
-		if Assigned == nil then
+		local RawDataType = type(RawData)
+
+		if RawDataType == "table" then
 			for Property, Value in next, RawData do
 				if Object[Property] ~= Value then
 					Object[Property] = Value
 				end
 			end
-		else
+		elseif RawDataType == "nil" then
+			Object:Destroy()
+		elseif RawDataType == "string" then
 			Object[RawData] = Assigned
+		else
+			Debug.Error("Invalid RawData type, expected table, nil, or string, got %s", RawDataType)
 		end
 
 		OnClientEventNumber = OnClientEventNumber + 1
@@ -225,10 +255,18 @@ return PseudoInstance:Register("ReplicatedPseudoInstance", {
 	Events = {};
 	Methods = {
 		Destroy = function(self)
-			if self.__id then
-				AutoReplicatedInstances[self.__id] = nil
-				self.__class.Storage[self.__id] = nil
-				ReplicationOrder:RemoveElement(self.__id)
+			local Id = self.__id
+
+			if Id then
+				self.__class.Storage[Id] = nil
+				ReplicationOrder:RemoveElement(Id)
+
+				if ReplicateToClients then -- Replicate Destroy
+					ReplicateUpdateToInterestedParties(self, Id)
+				end
+
+				SubscribingIndividuals[Id] = nil
+				AutoReplicatedInstances[Id] = nil
 			end
 			self:super("Destroy")
 		end;
