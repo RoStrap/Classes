@@ -1,4 +1,5 @@
 -- Rigidly defined PseudoInstance class system to instantiate Roblox-like instances
+-- @documentation https://rostrap.github.io/Libraries/Classes/PseudoInstance/
 -- @author Validark
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -40,7 +41,7 @@ local function Metatable__index(this, i)
 				return self[i].Event
 			end
 		elseif ClassTemplate.Internals[i] == nil or self ~= this then
-			Debug.Error("[%q] is not a valid Property of " .. tostring(self), i)
+			Debug.Error("[%s] is not a valid Property of " .. tostring(self), i)
 		end
 	else
 		return Value
@@ -253,6 +254,10 @@ function PseudoInstance.Register(_, ClassName, ClassData, Superclass)
 	return LockedClass
 end
 
+local function AccessProperty(self, Property)
+	local _ = self[Property]
+end
+
 PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userdata class with `.new()` instantiator
 	Internals = {
 		"Children", "PropertyChangedSignals", "Janitor";
@@ -350,7 +355,7 @@ PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userd
 		end;
 
 		IsDescendantOf = function(self, Grandparent)
-			return self.Parent == Grandparent or self.Parent:IsDescendantOf(Grandparent)
+			return self.Parent == Grandparent or (self.Parent and self.Parent:IsDescendantOf(Grandparent)) or false
 		end;
 
 		GetPropertyChangedSignal = function(self, String)
@@ -358,7 +363,7 @@ PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userd
 			local PropertyChangedSignal = self.PropertyChangedSignals[String]
 
 			if not PropertyChangedSignal then
-				if not self.__class.Properties[String] then Debug.Error("%s is not a valid Property of PseudoInstance", String) end
+				if not pcall(AccessProperty, self, String) then Debug.Error("%s is not a valid Property of " .. tostring(self), String) end
 				PropertyChangedSignal = Signal.new(self.SetEventActive, self.SetEventInactive)
 				self.Janitor:Add(PropertyChangedSignal, "Destroy")
 				self.PropertyChangedSignals[String] = PropertyChangedSignal
