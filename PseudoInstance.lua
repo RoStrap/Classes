@@ -70,19 +70,40 @@ local function Metatable__rawset(self, Property, Value)
 	return self
 end
 
+local function ReturnHelper(Success, ...)
+	if Success then
+		return ...
+	else
+		Debug.Error(...)
+	end
+end
+
+local ThreadDepthTracker = setmetatable({}, {__mode = "k"})
+
 local function Metatable__super(self, MethodName, ...)
-	local Class = self.__class
+	local Thread = coroutine.running()
+	local InSuperclass = ThreadDepthTracker[Thread]
+	local PreviousClass = InSuperclass or self.__class
+	local Class = PreviousClass
 
 	while Class.HasSuperclass do
 		Class = Class.Superclass
 		local Function = Class.Methods[MethodName]
 
-		if Function ~= self.__class.Methods[MethodName] then
-			return Function(self, ...)
+		if Function and Function ~= PreviousClass.Methods[MethodName] then
+			if InSuperclass then
+				ThreadDepthTracker[Thread] = Class
+				return Function(self, ...)
+			else
+				local NewThread = coroutine.create(Function)
+				ThreadDepthTracker[NewThread] = Class
+
+				return ReturnHelper(coroutine.resume(NewThread, self, ...))
+			end
 		end
 	end
 
-	return Debug.Error("Could not find parent method " .. MethodName)
+	return Debug.Error("Could not find parent method " .. MethodName .. " of " .. PreviousClass.ClassName)
 end
 
 local PseudoInstance = {}
@@ -137,7 +158,7 @@ local function superinit(self, ...)
 		self.currentclass = nil
 		self.superinit = nil
 	end
-
+	
 	CurrentClass.Init(self, ...)
 end
 
@@ -414,6 +435,14 @@ PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userd
 		Destroy = function(self)
 			self.Archivable = false
 			self.Parent = nil
+
+			for GlobalSelf, InternalSelf in next, Metatables do
+				if self == InternalSelf then
+					self.Janitor[GlobalSelf] = nil
+					Metatables[GlobalSelf] = nil
+				end
+			end
+
 			self.Janitor:Cleanup()
 
 			-- Nuke the object
@@ -496,6 +525,16 @@ function PseudoInstance.new(ClassName, ...)
 
 	Mt.Janitor:Add(self, "Destroy")
 	Mt:superinit(...)
+
+	if rawget(Mt, "currentclass") then
+		local StoppedOnClass = Class
+		
+		while StoppedOnClass.HasSuperclass and StoppedOnClass.Superclass ~= Mt.currentclass do
+			StoppedOnClass = StoppedOnClass.Superclass
+		end
+		
+		Debug.Error("Must call self:superinit(...) from " .. StoppedOnClass.ClassName .. ".Init")
+	end
 
 	return self
 end
