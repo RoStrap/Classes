@@ -440,6 +440,7 @@ PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userd
 				if self == InternalSelf then
 					self.Janitor[GlobalSelf] = nil
 					Metatables[GlobalSelf] = nil
+					break
 				end
 			end
 
