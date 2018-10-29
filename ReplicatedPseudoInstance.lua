@@ -35,8 +35,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local IsServer = RunService:IsServer()
 local IsClient = RunService:IsClient()
-local ReplicateToClients = IsServer and not IsClient -- Don't Replicate in SoloTestMode
-local ReplicateToServer = not IsServer and IsClient
 
 local Resources = require(ReplicatedStorage:WaitForChild("Resources"))
 local Debug = Resources:LoadLibrary("Debug")
@@ -179,7 +177,7 @@ local function OnPropertyChanged(self, i)
 	end
 end
 
-if ReplicateToClients then
+if IsServer then
 	Players.PlayerAdded:Connect(function(Player)
 		if RemoteFunction:InvokeClient(Player) then -- Yield until player loads
 			local NumReplicationOrder = #ReplicationOrder
@@ -202,7 +200,7 @@ if ReplicateToClients then
 
 		Event:Fire(Player, select(2, ...))
 	end)
-elseif ReplicateToServer then
+elseif IsClient then
 	local OnClientEventNumber = 1 -- Guarenteed that this will resolve in the order in which replication is intended to occur
 
 	RemoteEvent.OnClientEvent:Connect(function(EventNumber, ClassName, Id, RawData, Assigned) -- Handle objects being replicated to clients
@@ -261,7 +259,7 @@ return PseudoInstance:Register("ReplicatedPseudoInstance", {
 				self.__class.Storage[Id] = nil
 				ReplicationOrder:RemoveElement(Id)
 
-				if ReplicateToClients then -- Replicate Destroy
+				if IsServer then -- Replicate Destroy
 					ReplicateUpdateToInterestedParties(self, Id)
 				end
 
@@ -275,13 +273,13 @@ return PseudoInstance:Register("ReplicatedPseudoInstance", {
 	Init = function(self, Id)
 		self:superinit()
 
-		if ReplicateToClients then
+		if IsServer then
 			if not Id then
 				Id = Ids + 1
 				Ids = Id
 			end
 			self.Changed:Connect(OnPropertyChanged, self)
-		elseif ReplicateToServer then
+		elseif IsClient then
 			if Id then
 				for Event in next, self.__class.Events do
 					if Event ~= "Changed" then

@@ -158,7 +158,7 @@ local function superinit(self, ...)
 		self.currentclass = nil
 		self.superinit = nil
 	end
-	
+
 	CurrentClass.Init(self, ...)
 end
 
@@ -213,6 +213,53 @@ function PseudoInstance.Register(_, ClassName, ClassData, Superclass)
 		end
 	end
 
+	ClassData.Init = ClassData.Init or DefaultInit
+	ClassData.ClassName = ClassName
+
+	-- Make properties of internal objects externally accessible
+	if ClassData.WrappedProperties then
+		for ObjectName, Properties in next, ClassData.WrappedProperties do
+			for i = 1, #Properties do
+				local Property = Properties[i]
+
+				if ClassData.Properties[Property] then
+					Debug.Error("Identifier \"" .. Property .. "\" was used in both Properties and WrappedProperties")
+				else
+					ClassData.Properties[Property] = function(this, Value)
+						local Object = this[ObjectName]
+
+						if Object then
+							Object[Property] = Value
+						end
+
+						this:rawset(Property, Value)
+					end
+				end
+			end
+		end
+
+		local PreviousInit = ClassData.Init
+
+		ClassData.Init = function(self, ...)
+			PreviousInit(self, ...)
+
+			for ObjectName, Properties in next, ClassData.WrappedProperties do
+				for i = 1, #Properties do
+					local Property = Properties[i]
+					local Object = self[ObjectName]
+
+					if Object then
+						if self[Property] == nil then
+							self[Property] = Object[Property] -- This will implicitly error if they do something stupid
+						end
+					else
+						Debug.Error(ObjectName .. " is not a valid member of " .. ClassName)
+					end
+				end
+			end
+		end
+	end
+
 	if Superclass == nil then
 		Superclass = Templates.PseudoInstance
 	end
@@ -226,7 +273,7 @@ function PseudoInstance.Register(_, ClassName, ClassData, Superclass)
 			local ClassTable = ClassData[DataTable]
 			for i, v in next, Superclass[DataTable] do
 				if not ClassTable[i] then
-					ClassTable[i] = v == 0 and a == MethodIndex and Debug.Error(ClassName .. " failed to implement " .. i .. " from its superclass " .. Superclass.ClassName) or v
+					ClassTable[i] = v == 0 and Debug.Error(ClassName .. " failed to implement " .. i .. " from its superclass " .. Superclass.ClassName) or v
 				end
 			end
 		end
@@ -234,42 +281,23 @@ function PseudoInstance.Register(_, ClassName, ClassData, Superclass)
 		ClassData.HasSuperclass = false
 	end
 
-	ClassData.Init = ClassData.Init or DefaultInit
-	ClassData.ClassName = ClassName
+	local Identifiers = {} -- Make sure all identifiers are unique
 
-	-- Make properties of internal objects externally accessible
-	if ClassData.WrappedProperties then
-		for ObjectName, Properties in next, ClassData.WrappedProperties do
-			for i = 1, #Properties do
-				local Property = Properties[i]
-
-				ClassData.Properties[Property] = function(this, Value)
-					local Object = this[ObjectName]
-
-					if Object then
-						Object[Property] = Value
-					end
-
-					this:rawset(Property, Value)
+	for a = 1, #DataTableNames do -- Make sure there aren't any duplicate names
+		local DataTableName = DataTableNames[a]
+		for i in next, ClassData[DataTableName] do
+			if type(i) == "string" then
+				if Identifiers[i] then
+					Debug.Error("Identifier \"" .. i .. "\" was used in both " .. DataTableNames[Identifiers[i]] .. " and " .. DataTableName)
+				else
+					Identifiers[i] = a
 				end
-			end
-
-			local PreviousInit = ClassData.Init
-			ClassData.Init = function(self, ...)
-				PreviousInit(self, ...)
-
-				for i = 1, #Properties do
-					local Property = Properties[i]
-					local Object = self[ObjectName]
-					if self[Property] == nil and Object and Object[Property] ~= nil then
-						self[Property] = Object[Property]
-					end
-				end
+			else
+				Debug.Error("%q is not a valid Identifier, found inside " .. DataTableName, i)
 			end
 		end
 	end
 
-	ClassData.WrappedProperties = nil
 	local LockedClass = Table.Lock(ClassData)
 	Templates[ClassName] = LockedClass
 	return LockedClass
@@ -440,7 +468,6 @@ PseudoInstance:Register("PseudoInstance", { -- Generates a rigidly defined userd
 				if self == InternalSelf then
 					self.Janitor[GlobalSelf] = nil
 					Metatables[GlobalSelf] = nil
-					break
 				end
 			end
 
@@ -486,7 +513,7 @@ function PseudoInstance.new(ClassName, ...)
 
 	if not Class then
 		Resources:LoadLibrary(ClassName)
-		Class = Templates[ClassName] or Debug.Error("Invalid ClassName")
+		Class = Templates[ClassName] or Debug.Error("Invalid ClassName: " .. ClassName)
 	end
 
 	if Class.Abstract then
@@ -529,11 +556,11 @@ function PseudoInstance.new(ClassName, ...)
 
 	if rawget(Mt, "currentclass") then
 		local StoppedOnClass = Class
-		
+
 		while StoppedOnClass.HasSuperclass and StoppedOnClass.Superclass ~= Mt.currentclass do
 			StoppedOnClass = StoppedOnClass.Superclass
 		end
-		
+
 		Debug.Error("Must call self:superinit(...) from " .. StoppedOnClass.ClassName .. ".Init")
 	end
 
