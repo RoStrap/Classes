@@ -43,9 +43,15 @@ local SortedArray = Resources:LoadLibrary("SortedArray")
 local PseudoInstance = Resources:LoadLibrary("PseudoInstance")
 
 local Templates = Resources:GetLocalTable("Templates")
+local RemoteEvent, RemoteFunction
 
-local RemoteEvent = Resources:GetRemoteEvent("PseudoInstanceReplicator")
-local RemoteFunction = Resources:GetRemoteFunction("PseudoInstanceStartupVerify")
+if IsServer and IsClient and RunService:IsStudio() then
+	RemoteEvent = Instance.new("RemoteEvent")
+	RemoteFunction = Instance.new("RemoteFunction")
+else
+	RemoteEvent = Resources:GetRemoteEvent("PseudoInstanceReplicator")
+	RemoteFunction = Resources:GetRemoteFunction("PseudoInstanceStartupVerify")
+end
 
 local AutoReplicatedInstances = {}
 local LoadedPlayers = setmetatable({}, {__mode = "k"})
