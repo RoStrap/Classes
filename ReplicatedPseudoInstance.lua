@@ -1,4 +1,6 @@
 -- Auto-Replicating PseudoInstances
+-- @source https://raw.githubusercontent.com/RoStrap/Classes/master/ReplicatedPseudoInstance.lua
+-- @rostrap ReplicatedPseudoInstance
 -- @documentation https://rostrap.github.io/Libraries/Classes/ReplicatedPseudoInstance/
 -- @author Validark
 
